@@ -78,10 +78,27 @@ module Fingers
     def jump
       return nil if offset.nil?
 
-      `tmux copy-mode -t #{original_pane.pane_id}`
-      `tmux send-keys -t #{original_pane.pane_id} -X top-line`
-      `tmux send-keys -t #{original_pane.pane_id} -N #{offset.not_nil![0]} -X cursor-down`
-      `tmux send-keys -t #{original_pane.pane_id} -N #{offset.not_nil![1]} -X cursor-right`
+      pane_id = original_pane.pane_id
+      line, column = offset.not_nil!
+
+      `tmux copy-mode -t #{pane_id}`
+      `tmux send-keys -t #{pane_id} -X top-line`
+      `tmux send-keys -t #{pane_id} -N #{line} -X cursor-down`
+
+      # cursor-down restores a remembered column that top-line doesn't reset, so the cursor
+      # isn't necessarily at column 0 here. Move relative to its actual position instead;
+      # copy_cursor_x counts cells but cursor-right/left move by characters.
+      cursor_x = `tmux display-message -p -t #{pane_id} '\#{copy_cursor_x}'`.strip.to_i
+      if cursor_x > 0
+        cursor_x = `tmux display-message -p -t #{pane_id} '\#{=#{cursor_x}:copy_cursor_line}'`.chomp.size
+      end
+
+      delta = column - cursor_x
+      if delta > 0
+        `tmux send-keys -t #{pane_id} -N #{delta} -X cursor-right`
+      elsif delta < 0
+        `tmux send-keys -t #{pane_id} -N #{-delta} -X cursor-left`
+      end
 
       nil
     end
